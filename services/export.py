@@ -6,7 +6,7 @@ from aiogram.types import BufferedInputFile
 
 from database.database import Database
 
-TABLES = ("episodes", "pings")
+TABLES = ("episodes", "pings", "pills")
 
 
 def csv_file(db: Database, table: str) -> BufferedInputFile:

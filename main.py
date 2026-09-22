@@ -7,6 +7,7 @@ from aiogram.enums import ParseMode
 
 from config.config import load_config
 from database.database import Database
+from handlers.episodes import episodes_router
 from handlers.other import other_router
 from handlers.user import user_router
 from keyboards.keyboards import set_main_menu
@@ -30,6 +31,7 @@ async def main():
     dp.callback_query.filter(F.from_user.id == config.user_id)
 
     dp.include_router(user_router)
+    dp.include_router(episodes_router)
     dp.include_router(other_router)
 
     await set_main_menu(bot)

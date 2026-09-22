@@ -11,11 +11,14 @@ def fmt_day(day: str) -> str:
 
 
 def fmt_episode(e) -> str:
-    end = e["end"] or STILL_HURTS.lower()
-    line = f"• {fmt_day(e['day'])} {e['start']}–{end}: {e['intensity'].lower()}, {e['kind'].lower()}, {e['side'].lower()}"
-    if e["meds"] != "Нет":
+    def val(key: str) -> str:
+        return e[key].lower() if e[key] else "—"
+
+    line = (f"• {fmt_day(e['day'])} {e['start'] or '—'}–{e['end'] or STILL_HURTS.lower()}: "
+            f"{val('intensity')}, {val('kind')}, {val('side')}")
+    if e["meds"] and e["meds"] != "Нет":
         line += f"\n   препараты: {e['meds']}"
-    if e["cause"] != "Нет":
+    if e["cause"] and e["cause"] != "Нет":
         line += f"\n   причина: {e['cause']}"
     return line
 
@@ -25,6 +28,7 @@ def build_stats(db: Database, period: str) -> str:
     since = date.today() - timedelta(days=days - 1)
     episodes = db.episodes_since(since)
     pings, no_pain = db.pings_since(since)
+    pills, taken = db.pills_since(since)
 
     title = "за всё время" if period == "all" else f"за {days} дней (с {fmt_day(since.isoformat())})"
     lines = [
@@ -32,6 +36,7 @@ def build_stats(db: Database, period: str) -> str:
         f"Дней с головной болью: {len({e['day'] for e in episodes})}",
         f"Эпизодов: {len(episodes)}",
         f"Ответов на опрос: {pings}, из них «не болит»: {no_pain}",
+        f"Напоминаний про таблетки: {pills}, выпито: {taken}",
     ]
     if episodes:
         lines += ["", *map(fmt_episode, episodes)]

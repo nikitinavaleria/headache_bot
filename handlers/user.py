@@ -1,4 +1,5 @@
-import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
@@ -7,19 +8,21 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from database.database import Database
-from keyboards.keyboards import options_kb
-from lexicon.lexicon import FREE_TEXT, LEXICON, QUESTIONS, STILL_HURTS
+from keyboards.keyboards import end_how_kb, options_kb
+from lexicon.lexicon import FREE_TEXT, LEXICON, QUESTIONS, STILL_HURTS, TIME_RE
 from services.export import send_export
 from services.stats import build_stats
 
 user_router = Router()
 
-TIME_RE = re.compile(r"^([01]?\d|2[0-3]):[0-5]\d$")
-
 
 class Survey(StatesGroup):
     answering = State()  # проходим опросник, номер вопроса в data["i"]
     ending = State()     # ждём время окончания открытого эпизода
+
+
+def now_time() -> str:
+    return datetime.now(ZoneInfo("Europe/Moscow")).strftime("%H:%M")
 
 
 async def ask(message: Message, state: FSMContext, db: Database, i: int):
@@ -62,12 +65,11 @@ async def process_pain(message: Message, state: FSMContext, db: Database):
 
 
 @user_router.message(Command("end"))
-async def process_end(message: Message, state: FSMContext, db: Database):
+async def process_end(message: Message, db: Database):
     if not db.open_episode():
         await message.answer(LEXICON["no_open"])
         return
-    await state.set_state(Survey.ending)
-    await message.answer(LEXICON["ask_end"])
+    await message.answer(LEXICON["end_how"], reply_markup=end_how_kb())
 
 
 @user_router.message(Command("stats"))
@@ -84,6 +86,16 @@ async def process_export(message: Message, db: Database):
 async def process_cancel(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(LEXICON["cancelled"])
+
+
+# ---------- напоминание про таблетки ----------
+
+@user_router.callback_query(F.data.startswith("pill:"))
+async def process_pill(callback: CallbackQuery, db: Database):
+    _, pill_id, answer = callback.data.split(":")
+    await callback.message.edit_reply_markup()
+    db.set_pill(int(pill_id), taken=answer == "yes")
+    await callback.message.answer(LEXICON["pills_ok" if answer == "yes" else "pills_skip"])
 
 
 # ---------- ответы на пинг ----------
@@ -110,7 +122,24 @@ async def still_yes(callback: CallbackQuery, db: Database):
 
 
 @user_router.callback_query(F.data == "still:no")
-async def still_no(callback: CallbackQuery, state: FSMContext):
+async def still_no(callback: CallbackQuery, db: Database):
+    await callback.message.edit_reply_markup()
+    db.add_ping(pain=False)
+    await callback.message.answer(LEXICON["end_how"], reply_markup=end_how_kb())
+
+
+# ---------- время окончания эпизода ----------
+
+@user_router.callback_query(F.data == "end:now")
+async def end_now(callback: CallbackQuery, db: Database):
+    await callback.message.edit_reply_markup()
+    end = now_time()
+    db.close_episode(end)
+    await callback.message.answer(LEXICON["closed"].format(end=end))
+
+
+@user_router.callback_query(F.data == "end:manual")
+async def end_manual(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_reply_markup()
     await state.set_state(Survey.ending)
     await callback.message.answer(LEXICON["ask_end"])
@@ -120,7 +149,12 @@ async def still_no(callback: CallbackQuery, state: FSMContext):
 async def process_end_time(message: Message, state: FSMContext, db: Database):
     db.close_episode(message.text)
     await state.clear()
-    await message.answer(LEXICON["closed"])
+    await message.answer(LEXICON["closed"].format(end=message.text))
+
+
+@user_router.message(Survey.ending)
+async def process_bad_end_time(message: Message):
+    await message.answer(LEXICON["bad_time"])
 
 
 # ---------- ответы на вопросы опросника ----------
