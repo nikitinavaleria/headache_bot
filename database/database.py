@@ -20,9 +20,9 @@ class Database:
 
     # ---------- эпизоды ----------
 
-    def add_episode(self, answers: dict):
+    def add_episode(self, answers: dict, day: date | None = None):
         cols = ["day", *FIELDS]
-        values = [date.today().isoformat(), *(answers.get(f) for f in FIELDS)]
+        values = [(day or date.today()).isoformat(), *(answers.get(f) for f in FIELDS)]
         with self.con:
             self.con.execute(
                 f"INSERT INTO episodes ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})", values

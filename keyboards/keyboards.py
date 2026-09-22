@@ -31,6 +31,15 @@ def episodes_kb(episodes) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for e in episodes:
         builder.button(text=f"{e['day'][8:10]}.{e['day'][5:7]} {e['start']}", callback_data=f"ep:{e['id']}")
+    builder.adjust(3)
+    builder.row(InlineKeyboardButton(text="＋ Добавить пропущенный", callback_data="add"))
+    return builder.as_markup()
+
+
+def day_kb() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for text, days in (("Сегодня", 0), ("Вчера", 1), ("Позавчера", 2)):
+        builder.button(text=text, callback_data=f"day:{days}")
     return builder.adjust(3).as_markup()
 
 

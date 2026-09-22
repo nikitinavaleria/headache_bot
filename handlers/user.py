@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
@@ -30,7 +30,8 @@ async def ask(message: Message, state: FSMContext, db: Database, i: int):
     if i == len(QUESTIONS):
         data = await state.get_data()
         await state.clear()
-        db.add_episode(data["answers"])
+        day = date.fromisoformat(data["day"]) if data.get("day") else None
+        db.add_episode(data["answers"], day)
         await message.answer(LEXICON["saved"])
         return
     _, text, options = QUESTIONS[i]
@@ -46,9 +47,9 @@ async def save_answer(message: Message, state: FSMContext, db: Database, value: 
     await ask(message, state, db, data["i"] + 1)
 
 
-async def start_survey(message: Message, state: FSMContext, db: Database):
+async def start_survey(message: Message, state: FSMContext, db: Database, day: date | None = None):
     await state.set_state(Survey.answering)
-    await state.update_data(answers={})
+    await state.update_data(answers={}, day=day.isoformat() if day else None)
     await ask(message, state, db, 0)
 
 
