@@ -16,9 +16,19 @@ from services.scheduler import create_scheduler
 logger = logging.getLogger(__name__)
 
 
+class DowngradeNetworkErrors(logging.Filter):
+    """Обрывы long polling — обычное дело (сон, VPN, смена сети), aiogram переподключается сам."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.levelno == logging.ERROR and record.getMessage().startswith("Failed to fetch updates"):
+            record.levelno, record.levelname = logging.WARNING, "WARNING"
+        return True
+
+
 async def main():
     config = load_config()
     logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s %(name)s - %(message)s")
+    logging.getLogger("aiogram.dispatcher").addFilter(DowngradeNetworkErrors())
     logger.info("Starting bot")
 
     bot = Bot(token=config.token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
