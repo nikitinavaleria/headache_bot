@@ -11,6 +11,7 @@ from database.database import Database
 from keyboards.keyboards import end_how_kb, options_kb
 from lexicon.lexicon import FREE_TEXT, LEXICON, QUESTIONS, STILL_HURTS, TIME_RE
 from services.export import send_export
+from services.messages import drop_pending
 from services.stats import build_stats
 
 user_router = Router()
@@ -95,6 +96,7 @@ async def process_cancel(message: Message, state: FSMContext):
 async def process_pill(callback: CallbackQuery, db: Database):
     _, pill_id, answer = callback.data.split(":")
     await callback.message.edit_reply_markup()
+    await drop_pending(callback.bot, db, callback.message.chat.id, "pill", keep=callback.message.message_id)
     db.set_pill(int(pill_id), taken=answer == "yes")
     await callback.message.answer(LEXICON["pills_ok" if answer == "yes" else "pills_skip"])
 
@@ -104,6 +106,7 @@ async def process_pill(callback: CallbackQuery, db: Database):
 @user_router.callback_query(F.data == "ping:yes")
 async def ping_yes(callback: CallbackQuery, state: FSMContext, db: Database):
     await callback.message.edit_reply_markup()
+    await drop_pending(callback.bot, db, callback.message.chat.id, "ping", keep=callback.message.message_id)
     db.add_ping(pain=True)
     await start_survey(callback.message, state, db)
 
@@ -111,6 +114,7 @@ async def ping_yes(callback: CallbackQuery, state: FSMContext, db: Database):
 @user_router.callback_query(F.data == "ping:no")
 async def ping_no(callback: CallbackQuery, db: Database):
     await callback.message.edit_reply_markup()
+    await drop_pending(callback.bot, db, callback.message.chat.id, "ping", keep=callback.message.message_id)
     db.add_ping(pain=False)
     await callback.answer(LEXICON["noted"])
 
@@ -118,6 +122,7 @@ async def ping_no(callback: CallbackQuery, db: Database):
 @user_router.callback_query(F.data == "still:yes")
 async def still_yes(callback: CallbackQuery, db: Database):
     await callback.message.edit_reply_markup()
+    await drop_pending(callback.bot, db, callback.message.chat.id, "ping", keep=callback.message.message_id)
     db.add_ping(pain=True)
     await callback.answer(LEXICON["noted"])
 
@@ -125,6 +130,7 @@ async def still_yes(callback: CallbackQuery, db: Database):
 @user_router.callback_query(F.data == "still:no")
 async def still_no(callback: CallbackQuery, db: Database):
     await callback.message.edit_reply_markup()
+    await drop_pending(callback.bot, db, callback.message.chat.id, "ping", keep=callback.message.message_id)
     db.add_ping(pain=False)
     await callback.message.answer(LEXICON["end_how"], reply_markup=end_how_kb())
 

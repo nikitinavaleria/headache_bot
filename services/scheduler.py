@@ -11,18 +11,19 @@ from services.export import send_export
 from services.stats import fmt_day
 
 
-async def send_pills(bot: Bot, db: Database, user_id: int):
-    pill_id = db.add_pill()
-    await bot.send_message(user_id, LEXICON["pills"], reply_markup=yes_no_kb(f"pill:{pill_id}", "Выпила", "Не выпила"))
+async def send_pills(bot: Bot, db: Database, user_id: int, pill_id: int | None = None):
+    pill_id = pill_id or db.add_pill()
+    sent = await bot.send_message(
+        user_id, LEXICON["pills"], reply_markup=yes_no_kb(f"pill:{pill_id}", "Выпила", "Не выпила")
+    )
+    db.add_pending("pill", sent.message_id)
 
 
 async def repeat_pills(bot: Bot, db: Database, user_id: int):
     """Через час после напоминания повторяет его, если ответа не было."""
     pill_id = db.pending_pill()
     if pill_id:
-        await bot.send_message(
-            user_id, LEXICON["pills"], reply_markup=yes_no_kb(f"pill:{pill_id}", "Выпила", "Не выпила")
-        )
+        await send_pills(bot, db, user_id, pill_id)
 
 
 async def send_ping(bot: Bot, db: Database, user_id: int):
@@ -33,10 +34,9 @@ async def send_ping(bot: Bot, db: Database, user_id: int):
         await bot.send_message(user_id, LEXICON["auto_closed"].format(day=fmt_day(episode["day"]), evening=EVENING))
         episode = None
 
-    if episode:
-        await bot.send_message(user_id, LEXICON["still"], reply_markup=yes_no_kb("still"))
-    else:
-        await bot.send_message(user_id, LEXICON["ping"], reply_markup=yes_no_kb("ping"))
+    text, prefix = (LEXICON["still"], "still") if episode else (LEXICON["ping"], "ping")
+    sent = await bot.send_message(user_id, text, reply_markup=yes_no_kb(prefix))
+    db.add_pending("ping", sent.message_id)
 
 
 def create_scheduler(bot: Bot, db: Database, user_id: int) -> AsyncIOScheduler:

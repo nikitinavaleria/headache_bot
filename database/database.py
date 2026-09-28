@@ -16,6 +16,7 @@ class Database:
             );
             CREATE TABLE IF NOT EXISTS pings (id INTEGER PRIMARY KEY, ts TEXT, pain INTEGER);
             CREATE TABLE IF NOT EXISTS pills (id INTEGER PRIMARY KEY, ts TEXT, taken INTEGER);
+            CREATE TABLE IF NOT EXISTS pending (id INTEGER PRIMARY KEY, kind TEXT, message_id INTEGER);
         """)
 
     # ---------- эпизоды ----------
@@ -73,6 +74,19 @@ class Database:
         """id последнего напоминания о таблетках, на которое ещё не ответили."""
         row = self.con.execute("SELECT id FROM pills WHERE taken IS NULL ORDER BY id DESC LIMIT 1").fetchone()
         return row["id"] if row else None
+
+    # ---------- неотвеченные сообщения ----------
+
+    def add_pending(self, kind: str, message_id: int):
+        with self.con:
+            self.con.execute("INSERT INTO pending (kind, message_id) VALUES (?, ?)", (kind, message_id))
+
+    def take_pending(self, kind: str) -> list[int]:
+        """Возвращает id неотвеченных сообщений этого типа и забывает их."""
+        rows = self.con.execute("SELECT message_id FROM pending WHERE kind = ?", (kind,)).fetchall()
+        with self.con:
+            self.con.execute("DELETE FROM pending WHERE kind = ?", (kind,))
+        return [row["message_id"] for row in rows]
 
     # ---------- статистика и выгрузка ----------
 
