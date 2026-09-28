@@ -39,13 +39,19 @@ docker compose logs -f
 
 ### Автозапуск на macOS (launchd)
 
-Файл `~/Library/LaunchAgents/com.headache_bot.plist` запускает бота при входе в систему и перезапускает при падении.
+Готовый агент лежит в `launchd/com.headache_bot.plist`. Пока он не скопирован в `~/Library/LaunchAgents`,
+бот на маке не запускается — так и надо, если он работает на сервере.
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.headache_bot.plist     # включить
-launchctl unload ~/Library/LaunchAgents/com.headache_bot.plist   # выключить
-tail -f logs/bot.log                                             # смотреть лог
+cp launchd/com.headache_bot.plist ~/Library/LaunchAgents/          # включить автозапуск
+launchctl load ~/Library/LaunchAgents/com.headache_bot.plist
+launchctl bootout gui/$(id -u)/com.headache_bot                    # выключить
+rm ~/Library/LaunchAgents/com.headache_bot.plist                   # и убрать из автозапуска
+tail -f logs/bot.log                                               # смотреть лог
 ```
+
+`launchctl unload` действует только до следующего входа в систему — чтобы бот не вернулся,
+файл нужно убрать из `~/Library/LaunchAgents`.
 
 ## Важно: только один запущенный экземпляр
 
