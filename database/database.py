@@ -1,9 +1,19 @@
 import sqlite3
 from datetime import date, datetime
 
-from lexicon.lexicon import QUESTIONS
+from lexicon.lexicon import QUESTIONS, STILL_HURTS
 
 FIELDS = [key for key, _, _ in QUESTIONS]
+
+
+def relief_text(meds_time: str, end: str) -> str | None:
+    """«1 ч 20 мин» — сколько прошло от приёма препарата до конца боли."""
+    fmt = "%H:%M"
+    minutes = int((datetime.strptime(end, fmt) - datetime.strptime(meds_time, fmt)).total_seconds() // 60)
+    if minutes < 0:
+        return None
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours} ч {minutes:02d} мин" if hours else f"{minutes} мин"
 
 
 class Database:
@@ -18,6 +28,15 @@ class Database:
             CREATE TABLE IF NOT EXISTS pills (id INTEGER PRIMARY KEY, ts TEXT, taken INTEGER);
             CREATE TABLE IF NOT EXISTS pending (id INTEGER PRIMARY KEY, kind TEXT, message_id INTEGER);
         """)
+        self._add_new_columns()
+
+    def _add_new_columns(self):
+        """Новые вопросы в опроснике — новые колонки в уже существующей базе."""
+        known = {row["name"] for row in self.con.execute("PRAGMA table_info(episodes)")}
+        with self.con:
+            for field in FIELDS:
+                if field not in known:
+                    self.con.execute(f"ALTER TABLE episodes ADD COLUMN {field} TEXT")
 
     # ---------- эпизоды ----------
 
@@ -33,8 +52,17 @@ class Database:
         return self.con.execute("SELECT * FROM episodes WHERE end IS NULL ORDER BY id DESC LIMIT 1").fetchone()
 
     def close_episode(self, end: str):
+        """Закрывает эпизод и, если препарат был принят, считает, через сколько после него отпустило."""
+        episode = self.open_episode()
+        if not episode:
+            return
+        relief = episode["relief"]
+        if episode["meds_time"] and (not relief or relief == STILL_HURTS):
+            relief = relief_text(episode["meds_time"], end)
         with self.con:
-            self.con.execute("UPDATE episodes SET end = ? WHERE end IS NULL", (end,))
+            self.con.execute(
+                "UPDATE episodes SET end = ?, relief = ? WHERE id = ?", (end, relief, episode["id"])
+            )
 
     def episode(self, episode_id: int) -> sqlite3.Row | None:
         return self.con.execute("SELECT * FROM episodes WHERE id = ?", (episode_id,)).fetchone()

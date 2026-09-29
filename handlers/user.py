@@ -9,7 +9,7 @@ from aiogram.types import CallbackQuery, Message
 
 from database.database import Database
 from keyboards.keyboards import end_how_kb, options_kb
-from lexicon.lexicon import FREE_TEXT, LEXICON, QUESTIONS, STILL_HURTS, TIME_RE
+from lexicon.lexicon import DEPENDS, FREE_TEXT, LEXICON, NOW, QUESTIONS, STILL_HURTS, TIME_FIELDS, TIME_RE
 from services.export import send_export
 from services.messages import drop_pending
 from services.stats import build_stats
@@ -26,8 +26,17 @@ def now_time() -> str:
     return datetime.now(ZoneInfo("Europe/Moscow")).strftime("%H:%M")
 
 
+def skip(key: str, answers: dict) -> bool:
+    """Условные вопросы про препарат не задаём, если препарат не принимался."""
+    depends_on = DEPENDS.get(key)
+    return bool(depends_on) and answers.get(depends_on) in (None, "Нет")
+
+
 async def ask(message: Message, state: FSMContext, db: Database, i: int):
     """Задаёт i-й вопрос или сохраняет эпизод, если вопросы кончились."""
+    answers = (await state.get_data())["answers"]
+    while i < len(QUESTIONS) and skip(QUESTIONS[i][0], answers):
+        i += 1
     if i == len(QUESTIONS):
         data = await state.get_data()
         await state.clear()
@@ -135,6 +144,21 @@ async def still_no(callback: CallbackQuery, db: Database):
     await callback.message.answer(LEXICON["end_how"], reply_markup=end_how_kb())
 
 
+@user_router.callback_query(F.data == "relief:yes")
+async def relief_yes(callback: CallbackQuery, db: Database):
+    await callback.message.edit_reply_markup()
+    await drop_pending(callback.bot, db, callback.message.chat.id, "relief", keep=callback.message.message_id)
+    await callback.message.answer(LEXICON["end_how"], reply_markup=end_how_kb())
+
+
+@user_router.callback_query(F.data == "relief:no")
+async def relief_no(callback: CallbackQuery, db: Database):
+    await callback.message.edit_reply_markup()
+    await drop_pending(callback.bot, db, callback.message.chat.id, "relief", keep=callback.message.message_id)
+    db.add_ping(pain=True)
+    await callback.answer(LEXICON["noted"])
+
+
 # ---------- время окончания эпизода ----------
 
 @user_router.callback_query(F.data == "end:now")
@@ -170,7 +194,11 @@ async def process_bad_end_time(message: Message):
 async def answer_button(callback: CallbackQuery, state: FSMContext, db: Database):
     value = callback.data.removeprefix("ans:")
     await callback.message.edit_text(f"{callback.message.text}\n→ {value}")
-    await save_answer(callback.message, state, db, None if value == STILL_HURTS else value)
+    if value == STILL_HURTS:
+        value = None
+    elif value == NOW:
+        value = now_time()
+    await save_answer(callback.message, state, db, value)
 
 
 @user_router.message(Survey.answering, F.text)
@@ -179,7 +207,7 @@ async def answer_text(message: Message, state: FSMContext, db: Database):
     key = QUESTIONS[data["i"]][0]
     if key not in FREE_TEXT:
         await message.answer(LEXICON["use_buttons"])
-    elif key in ("start", "end") and not TIME_RE.match(message.text):
+    elif key in TIME_FIELDS and not TIME_RE.match(message.text):
         await message.answer(LEXICON["bad_time"])
     else:
         await save_answer(message, state, db, message.text)

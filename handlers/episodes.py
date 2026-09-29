@@ -7,9 +7,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from database.database import Database
-from handlers.user import start_survey
+from handlers.user import now_time, start_survey
 from keyboards.keyboards import day_kb, episode_kb, episodes_kb, options_kb
-from lexicon.lexicon import FREE_TEXT, LABELS, LEXICON, QUESTION_BY_KEY, STILL_HURTS, TIME_RE
+from lexicon.lexicon import FREE_TEXT, LABELS, LEXICON, NOW, QUESTION_BY_KEY, STILL_HURTS, TIME_FIELDS, TIME_RE
 from services.stats import fmt_day
 
 episodes_router = Router()
@@ -103,7 +103,11 @@ async def save_field(message: Message, state: FSMContext, db: Database, value: s
 async def edit_button(callback: CallbackQuery, state: FSMContext, db: Database):
     value = callback.data.removeprefix("ans:")
     await callback.message.edit_text(f"{callback.message.text}\n→ {value}")
-    await save_field(callback.message, state, db, None if value == STILL_HURTS else value)
+    if value == STILL_HURTS:
+        value = None
+    elif value == NOW:
+        value = now_time()
+    await save_field(callback.message, state, db, value)
 
 
 @episodes_router.message(Edit.value, F.text)
@@ -111,7 +115,7 @@ async def edit_text(message: Message, state: FSMContext, db: Database):
     key = (await state.get_data())["key"]
     if key not in FREE_TEXT:
         await message.answer(LEXICON["use_buttons"])
-    elif key in ("start", "end") and not TIME_RE.match(message.text):
+    elif key in TIME_FIELDS and not TIME_RE.match(message.text):
         await message.answer(LEXICON["bad_time"])
     else:
         await save_field(message, state, db, message.text)
